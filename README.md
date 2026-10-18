@@ -1,40 +1,44 @@
-# 🎬 Netflix Catalog — Content Strategy & Exploratory Data Analysis (SQL)
+# 🎬 Netflix Catalog — End-to-End SQL Data Cleaning & EDA
 
 ## 📌 Project Overview
-In this project, I performed an **Exploratory Data Analysis (EDA)** in **MySQL** on the Netflix Movies & TV Shows dataset (`netflix_staging`). The goal was to analyze Netflix's content acquisition strategy by examining the split between Movies and TV Shows, identifying top-producing countries and directors, uncovering monthly release seasonality, and profiling target audience maturity ratings.
+In this end-to-end SQL project, I transformed raw Netflix catalog data (`netflix_titles`) into an analysis-ready staging table (`netflix_staging`) and conducted an **Exploratory Data Analysis (EDA)** in **MySQL**. The goal was to ensure high data quality and uncover key insights into Netflix's content strategy, geographical production hubs, release seasonality, and target audience maturity ratings.
 
-🔗 **[View Full SQL Script (`netflix_eda.sql`)](./netflix_eda.sql)**
+### 📂 Repository Structure
+* 🧹 **[1. Data Cleaning Script (`netflix_data_cleaning.sql`)](./netflix_data_cleaning.sql)** — Staging setup, deduplication check, NULL standardization, string trimming, and date parsing.
+* 📊 **[2. Exploratory Data Analysis Script (`netflix_eda.sql`)](./netflix_eda.sql)** — Content distribution, geographical footprint, seasonality trends, and window function rankings.
 
 ---
 
 ## 🛠️ SQL Skills Demonstrated
 * **Database:** MySQL 8.0
-* **Key Techniques:**
-  * Data Quality & Sanity Checks (`IS NULL`, boundary filtering `release_year > 2026`, `DISTINCT`)
-  * Multi-dimensional Aggregations (`COUNT`, `AVG`, `ROUND`, `GROUP BY`)
-  * Window Functions for Percentage Share & Ranking (`SUM() OVER()`, `DENSE_RANK() OVER(PARTITION BY ...)`)
-  * Common Table Expressions (`WITH` / CTEs)
-  * Date Extraction (`MONTH()` for seasonality analysis)
+* **Data Cleaning:** Staging Table Architecture, Deduplication (`ROW_NUMBER() OVER`), String Trimming (`TRIM(LEADING ', ' FROM ...)`), NULL Standardization, Date Parsing (`STR_TO_DATE` with `'%M %d, %Y'`), Schema Alteration (`ALTER TABLE MODIFY COLUMN`).
+* **Data Analysis (EDA):** Multi-dimensional Aggregations (`COUNT`, `AVG`, `ROUND`, `GROUP BY`), Window Functions (`SUM() OVER()`, `DENSE_RANK() OVER(PARTITION BY ...)`), Common Table Expressions (`WITH` / CTEs), Seasonality Extraction (`MONTH()`).
 
 ---
 
-## 🔍 Key Analytical Areas
+## 🧹 Phase 1: Data Cleaning Pipeline (`netflix_data_cleaning.sql`)
 
-### 1. Data Sanity & Quality Verification
-Before running analytical aggregations, I verified the dataset for missing geographical metadata (`country IS NULL`), inspected distinct maturity ratings for unformatted values, and checked for chronological anomalies (`release_year > 2026`).
+1. **Staging Table Creation:** Cloned `netflix_titles` into `netflix_staging` to preserve raw data integrity.
+2. **Duplicate Verification:** Used a CTE with `ROW_NUMBER()` partitioned across all columns to check for duplicate rows.
+3. **String Cleanup & NULL Standardization:**
+   * Replaced blank strings (`''`) and `'Unknown'` placeholders in `director`, `cast`, and `country` with `NULL`.
+   * Stripped leading comma artifacts from country names using `TRIM(LEADING ', ' FROM country)`.
+4. **Date Formatting:** Parsed raw text dates (e.g., `'September 25, 2021'`) into native SQL `DATE` format:
 
 ```sql
-SELECT COUNT(*) AS missing_country_count
-FROM netflix_staging
-WHERE country IS NULL;
+UPDATE netflix_staging
+SET date_added = STR_TO_DATE(TRIM(`date_added`), '%M %d, %Y');
 
-SELECT *
-FROM netflix_staging
-WHERE release_year > 2026;
+ALTER TABLE netflix_staging
+MODIFY COLUMN `date_added` DATE;
 ```
 
-### 2. Catalog Composition (Movies vs. TV Shows)
-Calculated both absolute title counts and the relative percentage share of Movies versus TV Shows using a window function.
+---
+
+## 🔍 Phase 2: Exploratory Data Analysis (`netflix_eda.sql`)
+
+### 1. Catalog Composition (Movies vs. TV Shows)
+Calculated both absolute title counts and relative percentage share using a window function.
 
 ```sql
 SELECT 
@@ -45,20 +49,8 @@ FROM netflix_staging
 GROUP BY type;
 ```
 
-### 3. Geographical Footprint & Top Creators
-Identified the leading content-producing countries and ranked the top 10 most prolific directors in the Netflix library.
-
-```sql
-SELECT director, COUNT(*) AS total_titles
-FROM netflix_staging
-WHERE director IS NOT NULL
-GROUP BY director
-ORDER BY total_titles DESC
-LIMIT 10;
-```
-
-### 4. Release Seasonality & Content Freshness
-Compared the average release year across content types and grouped catalog additions by `MONTH(date_added)` to identify peak months for new releases on the platform.
+### 2. Release Seasonality & Content Freshness
+Compared the average release year across content types and grouped catalog additions by `MONTH(date_added)` to identify peak months for new releases.
 
 ```sql
 SELECT MONTH(date_added) AS month_added, COUNT(*) AS titles_added
@@ -68,8 +60,8 @@ GROUP BY MONTH(date_added)
 ORDER BY month_added ASC;
 ```
 
-### 5. Target Audience & Top 3 Maturity Ratings per Category
-Used a **CTE and `DENSE_RANK()`** partitioned by `type` to determine the top 3 audience maturity ratings (e.g., `TV-MA`, `TV-14`, `R`) separately for Movies and TV Shows.
+### 3. Top 3 Maturity Ratings per Category
+Used a **CTE and `DENSE_RANK()`** partitioned by `type` to determine the top 3 audience maturity ratings (`TV-MA`, `TV-14`, `R`) separately for Movies and TV Shows.
 
 ```sql
 WITH Rating_Counts AS (
